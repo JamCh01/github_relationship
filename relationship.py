@@ -36,25 +36,9 @@ def repos(username):
 
 def user_info(username):
     gevent.joinall([
-        gevent.spawn(info, username),
         gevent.spawn(followers, username),
         gevent.spawn(following, username),
-        gevent.spawn(starred, username),
-        gevent.spawn(repos, username),
     ])
-<<<<<<< HEAD
-
-    username = res['user_info']['username']
-    useremail = res['user_info']['email']
-    each = set(res['followers']) & set(res['following'])
-    res['followers'] = list(set(res['followers']) - each)
-    res['following'] = list(set(res['following']) - each )
-    res['each'] = list(each)
-
-    result = demjson.encode(res)
-    print(result)
-draw(username='HolaJam')
-=======
     each = set(res['followers']) & set(res['following']) # 互相关注为关注者和粉丝的交集
     res['followers'] = list(set(res['followers']) - each) # 根据关注和粉丝与互相关注的差集去掉重复数据
     res['following'] = list(set(res['following']) - each )
@@ -81,4 +65,3 @@ while level !=5:
         res = user_info(username=i['name'])
         draw(res = res, referer=i['name'], level=level+1)
     level += 1
->>>>>>> e7debbeec8dcf2a568b0a8e901e7869a2beca009
