@@ -55,7 +55,9 @@ def draw(res, referer, level):
     main_node = graph.find_one('user', property_key='name', property_value=referer)
     for key in res.keys():
         for i in res[key]:
-            tmp = Node('user', name=i, referer=referer, level=level)
+            tmp = graph.find_one('user', property_key='name', property_value=i)
+            if tmp is None:
+                tmp = Node('user', name=i, referer=referer, level=level)
             rel = Relationship(main_node, key, tmp)
             graph.create(rel)
             # todo 已有节点的过滤和正确的关系
