@@ -1,5 +1,5 @@
 import api
-from py2neo import Graph, Node, Relationship
+from py2neo import Graph, Node, Relationship, Subgraph
 import gevent
 from gevent import monkey
 monkey.patch_socket()
@@ -50,17 +50,27 @@ def find_node(level):
     user_list = graph.find(label='user', property_key='level', property_value=level)
     return user_list
 
+def find_rel(main, target):
+    run = '''Match(main:user {name:"%s"})
+    Match(target:user {name:"%s"})
+    return (main)<-[*]->(target)''' % (main, target)
+    a = graph.run(run).evaluate()
+    return a
 def draw(res, referer, level):
-    # 在neo4j中绘制节点和关系，
+    # 在neo4j中绘制节点和关系
+    # main_node为name: referer
     main_node = graph.find_one('user', property_key='name', property_value=referer)
     for key in res.keys():
         for i in res[key]:
+            # 暂存节点，label:user name:表示referer的关系用户，包括follower，following，each
             tmp = graph.find_one('user', property_key='name', property_value=i)
             if tmp is None:
                 tmp = Node('user', name=i, referer=referer, level=level)
+                graph.create(tmp)
+            if find_rel(main=referer, target=i) != []:
+                continue
             rel = Relationship(main_node, key, tmp)
             graph.create(rel)
-            # todo 已有节点的过滤和正确的关系
 while level !=5:
     for i in find_node(level=level):
         print(i['name'])
