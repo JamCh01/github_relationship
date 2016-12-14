@@ -1,4 +1,5 @@
 import api
+import gc
 from py2neo import Graph, Node, Relationship
 import gevent
 from gevent import monkey
@@ -88,4 +89,5 @@ while level != 5:
         print(i['name'])
         res = user_info(username=i['name'])
         draw(res=res, referer=i['name'], level=level + 1)
+        gc.collect()
     level += 1
