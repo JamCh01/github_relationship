@@ -5,7 +5,6 @@ import gevent
 from gevent import monkey
 monkey.patch_socket()
 new = api.github_spider()
-
 graph = Graph(password='test')
 graph.delete_all()
 username = 'HolaJam'
