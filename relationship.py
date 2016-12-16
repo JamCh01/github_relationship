@@ -82,8 +82,29 @@ def draw(res, referer, level):
                 graph.create(tmp)
             if find_rel(main=referer, target=i) != []:
                 continue
-            rel = Relationship(main_node, key, tmp)
-            graph.create(rel)
+
+            # 因为关注是用户行为，不能以偏概全作为一种关系，所以详细的将each分为四种关系，在逻辑层面上更加合理
+            rel_type = {
+                # 主节点和tmp节点关系为follower
+                'main2tmp_follower': Relationship(main_node, 'follower', tmp),
+                # 主节点和tmp节点关系为following
+                'main2tmp_following': Relationship(main_node, 'following', tmp),
+                # tmp节点和主节点关系为follower
+                'tmp2main_follower': Relationship(tmp, 'follower', main_node),
+                # tmp节点和主节点关系为following
+                'tmp2main_following': Relationship(tmp, 'following', main_node)
+            }
+
+            # 分别判断关系类型，绘制关系
+            if key == 'each':
+                for rel_key in rel_type.keys():
+                    graph.create(rel_type[rel_key])
+            elif key == 'followers':
+                graph.create(rel_type['main2tmp_follower'])
+            elif key == 'following':
+                graph.create(rel_type['main2tmp_following'])
+
+
 while level != 5:
     for i in find_node(level=level):
         print(i['name'])
