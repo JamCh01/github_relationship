@@ -58,11 +58,10 @@ def find_node(level):
 
 
 def find_rel(main, target):
-    print(main, target)
-    run = '''Match(main:user {name:"%s"})
-    Match(target:user {name:"%s"})
-    return (main)<-[*]->(target)''' % (main, target)
-    a = graph.run(run).evaluate()
+    run = '''Match(main:user {name:"%s"}) Match(target:user {name:"%s"}) return (main)-[*]->(target)''' % (
+        main, target)
+    print(run)
+    a = graph.run(run).data()
     return a
 
 
@@ -81,8 +80,7 @@ def draw(res, referer, level):
             if tmp is None:
                 tmp = Node('user', name=i, referer=referer, level=level)
                 draw_tx.create(tmp)
-            if find_rel(main=referer, target=i) != None:
-                print(find_rel(main=referer, target=i))
+            if find_rel(main=referer, target=i) != []:
                 continue
 
             # 因为关注是用户行为，不能以偏概全作为一种关系，所以详细的将each分为四种关系，在逻辑层面上更加合理
@@ -116,5 +114,3 @@ while level != 5:
         draw(res=res, referer=i['name'], level=level + 1)
     level += 1
     gc.collect()
-
-
