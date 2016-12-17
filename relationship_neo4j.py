@@ -58,6 +58,7 @@ def find_node(level):
 
 
 def find_rel(main, target):
+    print(main, target)
     run = '''Match(main:user {name:"%s"})
     Match(target:user {name:"%s"})
     return (main)<-[*]->(target)''' % (main, target)
@@ -66,6 +67,7 @@ def find_rel(main, target):
 
 
 def draw(res, referer, level):
+    draw_tx = graph.begin(autocommit=False)
     # 在neo4j中绘制节点和关系
     # main_node为name: referer
     main_node = graph.find_one(
@@ -78,8 +80,9 @@ def draw(res, referer, level):
             tmp = graph.find_one('user', property_key='name', property_value=i)
             if tmp is None:
                 tmp = Node('user', name=i, referer=referer, level=level)
-                graph.create(tmp)
-            if find_rel(main=referer, target=i) != []:
+                draw_tx.create(tmp)
+            if find_rel(main=referer, target=i) != None:
+                print(find_rel(main=referer, target=i))
                 continue
 
             # 因为关注是用户行为，不能以偏概全作为一种关系，所以详细的将each分为四种关系，在逻辑层面上更加合理
@@ -97,11 +100,13 @@ def draw(res, referer, level):
             # 分别判断关系类型，绘制关系
             if key == 'each':
                 for rel_key in rel_type.keys():
-                    graph.create(rel_type[rel_key])
+                    draw_tx.create(rel_type[rel_key])
             elif key == 'followers':
-                graph.create(rel_type['main2tmp_follower'])
+                draw_tx.create(rel_type['main2tmp_follower'])
             elif key == 'following':
-                graph.create(rel_type['main2tmp_following'])
+                draw_tx.create(rel_type['main2tmp_following'])
+    draw_tx.commit()
+    draw_tx.finished()
 
 
 while level != 5:
@@ -109,7 +114,7 @@ while level != 5:
         print(i['name'])
         res = user_info(username=i['name'])
         draw(res=res, referer=i['name'], level=level + 1)
-        gc.collect()
     level += 1
+    gc.collect()
 
 
