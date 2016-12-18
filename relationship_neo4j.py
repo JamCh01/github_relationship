@@ -1,10 +1,9 @@
-import api
+import common_spider
 import gc
 from py2neo import Graph, Node, Relationship
 import gevent
 from gevent import monkey
 monkey.patch_socket()
-new = api.github_spider()
 graph = Graph(password='test')
 graph.delete_all()
 username = 'HolaJam'
@@ -14,31 +13,14 @@ graph.create(main_node)
 
 res = {}
 
-
-def info(username):
-    res['user_info'] = new.user_info(username=username)
-
-
-def followers(username):
-    res['followers'] = new.user_followers(username=username)
-
-
-def following(username):
-    res['following'] = new.user_following(username=username)
-
-
-def starred(username):
-    res['starred'] = new.user_starred(username=username)
-
-
-def repos(username):
-    res['repos'] = new.user_repos(username=username)
-
+common_spider.info(username=username)
+common_spider.starred(username=username)
+common_spider.repos(username=username)
 
 def user_info(username):
     gevent.joinall([
-        gevent.spawn(followers, username),
-        gevent.spawn(following, username),
+        gevent.spawn(common_spider.followers, username),
+        gevent.spawn(common_spider.following, username),
     ])
     each = set(res['followers']) & set(res['following'])  # 互相关注为关注者和粉丝的交集
     res['followers'] = list(set(res['followers']) -
