@@ -13,9 +13,10 @@ graph.create(main_node)
 
 res = {}
 
-common_spider.info(username=username)
-common_spider.starred(username=username)
-common_spider.repos(username=username)
+# common_spider.info(username=username)
+# common_spider.starred(username=username)
+# common_spider.repos(username=username)
+
 
 def user_info(username):
     gevent.joinall([
