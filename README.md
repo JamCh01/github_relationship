@@ -33,9 +33,26 @@ level3 在9小时内未遍历完成
 
 ### 使用MariaDB的版本
 已经实现用户与用户之间的关系，目前正在稳定的运行。
+测试发现，以我为起点的用户基数如下：
+```json
+SELECT COUNT(*) FROM relationship WHERE level=0; //零度人脉（目标用户自己）
+1
+SELECT COUNT(*) FROM relationship WHERE level=1; //一度人脉
+39
+SELECT COUNT(*) FROM relationship WHERE level=2; //二度人脉
+616
+SELECT COUNT(*) FROM relationship WHERE level=3; //三度人脉
+25280
+这里讨论的人脉数目并非是用户节点或者用户总数，而是在某度人脉中的关系的总量。如果刻意需要查询用户数目，可以使用如下的操作：
+SELECT DISTINCT COUNT(user_name) FROM relationship WHERE level=1; //查询零度人脉（目标用户自己）中的用户总数
+1
+SELECT COUNT(T.A) FROM (SELECT DISTINCT(user_name) AS A FROM relationship WHERE user_name!='HolaJam' AND level=1) T  //查询一度人脉中的用户总数
+24
+```
 
 ### 使用MongoDB的版本
 #### todo
 
 ## 期望
 使用Flask展现数据，使用echarts描述数据。
+
