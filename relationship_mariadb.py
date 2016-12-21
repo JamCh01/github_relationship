@@ -1,16 +1,16 @@
 import pymysql as mariadb
 from common_spider import user_info
 
-user_name = 'HolaJam'
+user_name = 'Evi1m0'
 level = 0
 
 
 def mariadb_connection():
     # 连接MariaDB
     conn = mariadb.connect(
-        host='localhost',
+        host='155.254.33.134',
         port=3306,
-        user='root',
+        user='github',
         passwd='test',
         db='github',
         charset='UTF8')
@@ -87,8 +87,8 @@ def draw(res, referer, level):
                         type=key)
 
 mariadb_insert(user_name=user_name, level=level, referer=' ', type='self')
-while level != 5:
+while level != 6:
     for i in find_all_level(level=level):
-        # print(i)
+        print(i)
         draw(res=user_info(username=i[1]), referer=i[1], level=level)
     level += 1
