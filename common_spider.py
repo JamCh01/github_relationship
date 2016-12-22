@@ -1,4 +1,3 @@
-
 import requests
 from bs4 import BeautifulSoup
 import gevent
@@ -27,7 +26,9 @@ class github_spider(object):
             email = ''
         return {'username': username, 'email': email}
 
-    def user_relationship(self, username, action, page=1):
+
+    def __relationship(self, username, action, page):
+        tmp = []
         try:
             # 遍历用户列表
             node = self.__get_page(
@@ -38,21 +39,27 @@ class github_spider(object):
             users_node = all_user_node.find_all(
                 'div', {
                     'class': 'd-table col-12 width-full py-4 border-bottom border-gray-light'})
-            print(action, tmp)
             if users_node == []:
                 return tmp
             for i in users_node:
                 user = i.find('span', {'class': 'link-gray pl-1'}).text
                 tmp.append(user)
-            try:
-                # 页码数目加一
-                self.user_relationship(
-                    username=username, action=action, page=page + 1)
-            except Exception as e:
-                pass
         except Exception as e:
             pass
         return tmp
+
+    def user_relationship(self, username, action):
+        result = []
+        page = 1
+        while True:
+            tmp = self.__relationship(username=username,action=action,page=page)
+            if len(tmp) == 0:
+                break
+            else:
+                result += tmp
+            page += 1
+        return result
+
 
 new = github_spider()
 
@@ -79,4 +86,3 @@ def user_info(username):
     res['following'] = list(set(res['following']) - each)
     res['each'] = list(each)
     return res
-tmp = []

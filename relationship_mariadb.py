@@ -1,7 +1,7 @@
 import pymysql as mariadb
 from common_spider import user_info
 
-user_name = 'Evi1m0'
+user_name = 'HolaJam'
 level = 0
 
 
