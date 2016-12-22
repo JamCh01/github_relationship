@@ -8,7 +8,7 @@ level = 0
 def mariadb_connection():
     # 连接MariaDB
     conn = mariadb.connect(
-        host='155.254.33.134',
+        host='localhost',
         port=3306,
         user='github',
         passwd='test',
