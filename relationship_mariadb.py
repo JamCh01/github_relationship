@@ -5,43 +5,48 @@ user_name = 'HolaJam'
 level = 0
 
 
-def mariadb_connection():
+
     # 连接MariaDB
-    conn = mariadb.connect(
+conn = mariadb.connect(
         host='localhost',
         port=3306,
-        user='github',
+        user='root',
         passwd='test',
         db='github',
         charset='UTF8')
-    return conn
 
 
 def mariadb_insert(user_name, level, referer, type):
-    with mariadb_connection() as cursor:
+    with conn as cursor:
         SQL = '''INSERT INTO relationship (user_name, level, referer, type) VALUES (%s,%s,%s,%s)'''
         cursor.execute(SQL, (user_name, level, referer, type))
-
+    cursor.close()
 
 def mariadb_select_forward(user_name, referer):
-    with mariadb_connection() as cursor:
+    with conn as cursor:
         SQL = '''SELECT * FROM relationship WHERE user_name=%s AND referer=%s'''
         cursor.execute(SQL, (user_name, referer))
-    return cursor.fetchone()
+    user = cursor.fetchone()
+    cursor.close()
+    return user
 
 
 def mariadb_select_reverse(user_name, referer):
-    with mariadb_connection() as cursor:
+    with conn as cursor:
         SQL = '''SELECT * FROM relationship WHERE user_name=%s AND referer=%s'''
         cursor.execute(SQL, (referer, user_name))
-    return cursor.fetchone()
+    user = cursor.fetchone()
+    cursor.close()
+    return user
 
 
 def find_all_level(level):
-    with mariadb_connection() as cursor:
+    with conn as cursor:
         SQL = '''SELECT * FROM relationship WHERE level=%s'''
         cursor.execute(SQL, level)
-    return cursor.fetchall()
+    levels = cursor.fetchall()
+    cursor.close()
+    return levels
 
 res = user_info(username=user_name)
 

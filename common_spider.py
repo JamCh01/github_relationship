@@ -1,4 +1,8 @@
 import requests
+from requests.packages.urllib3 import Retry
+from requests.adapters import HTTPAdapter
+
+import datetime
 from bs4 import BeautifulSoup
 import gevent
 from gevent import monkey
@@ -13,7 +17,11 @@ class github_spider(object):
         self.base_url = 'https://github.com/'
 
     def __get_page(self, url):
-        r = requests.get(url=url)
+        s = requests.Session()
+        https_retries = Retry(50)
+        https = requests.adapters.HTTPAdapter(max_retries=https_retries)
+        s.mount('https://', https)
+        r = s.get(url=url)
         res = (r.text.encode(r.encoding).decode('utf8'))
         soup = BeautifulSoup(res, 'html.parser')
         return soup
@@ -54,6 +62,8 @@ class github_spider(object):
         while True:
             tmp = self.__relationship(username=username,action=action,page=page)
             if len(tmp) == 0:
+                with open('log.txt','a') as f:
+                    f.write('%s %s %s %s page break\n' % (str(datetime.datetime.now()), username, action, page))
                 break
             else:
                 result += tmp
