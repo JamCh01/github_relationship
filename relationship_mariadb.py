@@ -48,6 +48,8 @@ def find_all_level(level):
     cursor.close()
     return levels
 
+
+
 res = user_info(username=user_name)
 
 
@@ -90,7 +92,7 @@ def draw(res, referer, level):
                         level=level + 1,
                         referer=referer,
                         type=key)
-
+print(user_name)
 mariadb_insert(user_name=user_name, level=level, referer=' ', type='self')
 while level != 6:
     for i in find_all_level(level=level):
