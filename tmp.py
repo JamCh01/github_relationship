@@ -1,24 +1,27 @@
+from gevent import monkey
+monkey.patch_all()
 import queue
 import gevent
 import requests
 import threading
 import pymysql as mariadb
-from gevent import monkey
-monkey.patch_all()
+# Threads may share the module, but not connections.
+# 线程可以共享模块，但不能共享连接。
+# https://www.python.org/dev/peps/pep-0249/#threadsafety
 from requests.packages.urllib3 import Retry
 from requests.adapters import HTTPAdapter
 from bs4 import BeautifulSoup
 
 
-def mariadb_insert(user_name, level, referer, type):
-    with conn as cursor:
+def mariadb_insert(connection, user_name, level, referer, type):
+    with connection as cursor:
         SQL = '''INSERT INTO relationship (user_name, level, referer, type) VALUES (%s,%s,%s,%s)'''
         cursor.execute(SQL, (user_name, level, referer, type))
     cursor.close()
 
 
-def mariadb_select_forward(user_name, referer):
-    with conn as cursor:
+def mariadb_select_forward(connection, user_name, referer):
+    with connection as cursor:
         SQL = '''SELECT * FROM relationship WHERE user_name=%s AND referer=%s'''
         cursor.execute(SQL, (user_name, referer))
     user = cursor.fetchone()
@@ -26,8 +29,8 @@ def mariadb_select_forward(user_name, referer):
     return user
 
 
-def mariadb_select_reverse(user_name, referer):
-    with conn as cursor:
+def mariadb_select_reverse(connection, user_name, referer):
+    with connection as cursor:
         SQL = '''SELECT * FROM relationship WHERE user_name=%s AND referer=%s'''
         cursor.execute(SQL, (referer, user_name))
     user = cursor.fetchone()
@@ -35,8 +38,8 @@ def mariadb_select_reverse(user_name, referer):
     return user
 
 
-def find_all_level(level):
-    with conn as cursor:
+def find_all_level(connection, level):
+    with connection as cursor:
         SQL = '''SELECT * FROM relationship WHERE level=%s'''
         cursor.execute(SQL, level)
     levels = cursor.fetchall()
@@ -44,13 +47,15 @@ def find_all_level(level):
     return levels
 
 
-def check_relationship(username, referer):
+def check_relationship(connection, username, referer):
     # 校验是否存在本关系
     # 不存在时候插入
     if mariadb_select_forward(
+            connection=connection,
             user_name=username,
             referer=referer,
     ) is None and mariadb_select_reverse(
+            connection=connection,
             user_name=username,
             referer=referer) is None:
         return True
@@ -186,11 +191,23 @@ class followers_consumer(threading.Thread):
         self.referer = referer
 
     def run(self):
+        # follower线程连接
+        follower_connection = mariadb.connect(
+            host='localhost',
+            port=3306,
+            user='github',
+            passwd='test',
+            db='github',
+            charset='UTF8')
         while True:
             try:
                 user_name = followers_queue.get(block=True)
-                if check_relationship(username=user_name, referer=referer):
+                if check_relationship(
+                        connection=follower_connection,
+                        username=user_name,
+                        referer=referer):
                     mariadb_insert(
+                        connection=follower_connection,
                         user_name=user_name,
                         level=level + 1,
                         referer=referer,
@@ -198,8 +215,8 @@ class followers_consumer(threading.Thread):
                 else:
                     continue
             except Exception as e:
-                print(e)
                 break
+            follower_connection.close()
         followers_lock.release()
 
 
@@ -214,12 +231,24 @@ class following_consumer(threading.Thread):
         self.referer = referer
 
     def run(self):
+        # following线程连接
+        following_connection = mariadb.connect(
+            host='localhost',
+            port=3306,
+            user='github',
+            passwd='test',
+            db='github',
+            charset='UTF8')
         while True:
             try:
                 user_name = following_queue.get(block=True)
 
-                if check_relationship(username=user_name, referer=referer):
+                if check_relationship(
+                        connection=following_connection,
+                        username=user_name,
+                        referer=referer):
                     mariadb_insert(
+                        connection=following_connection,
                         user_name=user_name,
                         level=level + 1,
                         referer=referer,
@@ -227,9 +256,9 @@ class following_consumer(threading.Thread):
                 else:
                     continue
             except Exception as e:
-                print(e)
-                following_lock.release()
+                following_connection.close()
                 break
+            following_lock.release()
 
 
 def followers(username):
@@ -252,6 +281,7 @@ if __name__ == '__main__':
     followers_queue = queue.Queue()
     # following生产者队列
     following_queue = queue.Queue()
+    # 主线程连接
     conn = mariadb.connect(
         host='localhost',
         port=3306,
@@ -259,6 +289,8 @@ if __name__ == '__main__':
         passwd='test',
         db='github',
         charset='UTF8')
+
+
 
     # 目标用户
     username = 'HolaJam'
@@ -270,12 +302,13 @@ if __name__ == '__main__':
     type = 'self'
     # 加入初始用户
     mariadb_insert(
+        connection=conn,
         user_name=username,
         level=level,
         referer=default_referer,
         type=type)
     while level != 6:
-        for i in find_all_level(level=level):
+        for i in find_all_level(connection=conn, level=level):
             referer = i[1]
             # i:(1, 'HolaJam', '0', ' ', 'self')
             # 对线程上锁
