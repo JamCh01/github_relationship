@@ -1,5 +1,6 @@
 from gevent import monkey
 monkey.patch_all()
+import gc
 import queue
 import datetime
 import gevent
@@ -29,16 +30,6 @@ def mariadb_select_forward(connection, user_name, referer):
     cursor.close()
     return user
 
-
-def mariadb_select_reverse(connection, user_name, referer):
-    with connection as cursor:
-        SQL = '''SELECT * FROM relationship WHERE user_name=%s AND referer=%s'''
-        cursor.execute(SQL, (referer, user_name))
-    user = cursor.fetchone()
-    cursor.close()
-    return user
-
-
 def find_all_level(connection, level):
     with connection as cursor:
         SQL = '''SELECT * FROM relationship WHERE level=%s'''
@@ -55,10 +46,7 @@ def check_relationship(connection, username, referer):
             connection=connection,
             user_name=username,
             referer=referer,
-    ) is None and mariadb_select_reverse(
-            connection=connection,
-            user_name=username,
-            referer=referer) is None:
+    ) is None:
         return True
     else:
         return False
@@ -84,7 +72,7 @@ class github_spider(object):
         https_retries = Retry(50)
         https = requests.adapters.HTTPAdapter(max_retries=https_retries)
         s.mount('https://', https)
-        r = s.get(url=url, timeout=None)
+        r = s.get(url=url, timeout=30)
         res = (r.text.encode(r.encoding).decode('utf8'))
         soup = BeautifulSoup(res, 'html.parser')
         return soup
@@ -129,7 +117,13 @@ class github_spider(object):
             tmp = self.__relationship(
                 username=username, action=action, page=page)
             if tmp == []:
+                with open('log.txt','a') as f:
+                    f.write('%s %s %s %s page break\n' % (str(datetime.datetime.now()), username, action, page))
+                f.close()
                 break
+            with open('log.txt', 'a') as f:
+                f.write('%s %s %s %s page running\n' % (str(datetime.datetime.now()), username, action, page))
+            f.close()
             if action == 'followers':
                 _followers_producer = followers_producer(tmp=tmp)
                 _followers_consumer = followers_consumer()
@@ -203,6 +197,7 @@ class followers_consumer(threading.Thread):
             db='github',
             charset='UTF8')
         while True:
+
             try:
                 user_name = followers_queue.get()
                 if check_relationship(
@@ -318,6 +313,7 @@ if __name__ == '__main__':
             referer = i[1]
             # i:(1, 'HolaJam', '0', ' ', 'self')
             user_info(username=i[1])
+            gc.collect()
 
         level += 1
         end_time = datetime.datetime.now()
@@ -326,4 +322,4 @@ if __name__ == '__main__':
 # 消费者 - 生产者 模型基本完成，在INSERT时候不会消耗太多时间
 # todo 完善其他功能
 # todo 增加抓取的多线程
-# todo 线程锁
+# todo sqlalchemy解决Too many connections问题
