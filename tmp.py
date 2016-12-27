@@ -3,8 +3,8 @@ import gevent
 import requests
 import threading
 import pymysql as mariadb
-# from gevent import monkey
-# monkey.patch_all()
+from gevent import monkey
+monkey.patch_all()
 from requests.packages.urllib3 import Retry
 from requests.adapters import HTTPAdapter
 from bs4 import BeautifulSoup
@@ -255,7 +255,7 @@ if __name__ == '__main__':
     conn = mariadb.connect(
         host='localhost',
         port=3306,
-        user='root',
+        user='github',
         passwd='test',
         db='github',
         charset='UTF8')
@@ -269,7 +269,11 @@ if __name__ == '__main__':
     # 初始关系类型
     type = 'self'
     # 加入初始用户
-    mariadb_insert(user_name=username, level=level, referer=default_referer, type=type)
+    mariadb_insert(
+        user_name=username,
+        level=level,
+        referer=default_referer,
+        type=type)
     while level != 6:
         for i in find_all_level(level=level):
             referer = i[1]
