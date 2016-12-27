@@ -3,12 +3,11 @@ import gevent
 import requests
 import threading
 import pymysql as mariadb
-from gevent import monkey
-monkey.patch_all()
+# from gevent import monkey
+# monkey.patch_all()
 from requests.packages.urllib3 import Retry
 from requests.adapters import HTTPAdapter
 from bs4 import BeautifulSoup
-
 
 
 def mariadb_insert(user_name, level, referer, type):
@@ -16,6 +15,7 @@ def mariadb_insert(user_name, level, referer, type):
         SQL = '''INSERT INTO relationship (user_name, level, referer, type) VALUES (%s,%s,%s,%s)'''
         cursor.execute(SQL, (user_name, level, referer, type))
     cursor.close()
+
 
 def mariadb_select_forward(user_name, referer):
     with conn as cursor:
@@ -51,8 +51,8 @@ def check_relationship(username, referer):
             user_name=username,
             referer=referer,
     ) is None and mariadb_select_reverse(
-        user_name=username,
-        referer=referer) is None:
+            user_name=username,
+            referer=referer) is None:
         return True
     else:
         return False
@@ -96,7 +96,6 @@ class github_spider(object):
             email = ''
         return {'username': username, 'email': email}
 
-
     def __relationship(self, username, action, page):
         tmp = []
         try:
@@ -121,18 +120,21 @@ class github_spider(object):
     def user_relationship(self, username, action):
         page = 1
         while True:
-            tmp = self.__relationship(username=username,action=action,page=page)
+            tmp = self.__relationship(
+                username=username, action=action, page=page)
             if tmp == []:
                 break
             if action == 'followers':
                 _followers_producer = followers_producer(tmp=tmp)
                 _followers_consumer = followers_consumer()
                 _followers_producer.start()
+                _followers_producer.join()
                 _followers_consumer.start()
             elif action == 'following':
                 _following_producer = following_producer(tmp=tmp)
                 _following_consumer = following_consumer()
                 _following_producer.start()
+                _following_producer.join()
                 _following_consumer.start()
             page += 1
 
@@ -141,11 +143,13 @@ class followers_producer(threading.Thread):
     '''
     followers生产者
     '''
+
     def __init__(self, tmp):
         threading.Thread.__init__(self)
         threading.Thread.name = 'followers_producer'
         self.tmp = tmp
         self.data = followers_queue
+
     def run(self):
         followers_lock.acquire()
         for i in self.tmp:
@@ -157,79 +161,93 @@ class following_producer(threading.Thread):
     '''
     following生产者
     '''
+
     def __init__(self, tmp):
         threading.Thread.__init__(self)
         threading.Thread.name = 'following_producer'
         self.tmp = tmp
         self.data = following_queue
+
     def run(self):
         following_lock.acquire()
         for i in self.tmp:
             # print(i)
             self.data.put(i)
 
+
 class followers_consumer(threading.Thread):
     '''
     followers的消费者
     '''
+
     def __init__(self):
         threading.Thread.__init__(self)
         threading.Thread.name = 'followers_consumer'
         self.referer = referer
+
     def run(self):
         while True:
             try:
-                user_name = followers_queue.get()
+                user_name = followers_queue.get(block=True)
                 if check_relationship(username=user_name, referer=referer):
                     mariadb_insert(
-                        user_name=i,
+                        user_name=user_name,
                         level=level + 1,
                         referer=referer,
                         type='follower')
                 else:
                     continue
             except Exception as e:
-                followers_lock.release()
+                print(e)
                 break
+        followers_lock.release()
+
+
 class following_consumer(threading.Thread):
     '''
     following的消费者
     '''
+
     def __init__(self):
         threading.Thread.__init__(self)
         threading.Thread.name = 'following_consumer'
         self.referer = referer
+
     def run(self):
         while True:
             try:
-                user_name = following_queue.get()
+                user_name = following_queue.get(block=True)
+
                 if check_relationship(username=user_name, referer=referer):
                     mariadb_insert(
-                        user_name=i,
+                        user_name=user_name,
                         level=level + 1,
                         referer=referer,
                         type='following')
                 else:
                     continue
             except Exception as e:
+                print(e)
                 following_lock.release()
                 break
+
 
 def followers(username):
     new.user_relationship(username=username, action='followers')
 
+
 def following(username):
     new.user_relationship(username=username, action='following')
 
-new = github_spider()
+
 def user_info(username):
     gevent.joinall([
         gevent.spawn(followers, username),
         gevent.spawn(following, username),
     ])
 
-
 if __name__ == '__main__':
+    new = github_spider()
     # followers生产者队列
     followers_queue = queue.Queue()
     # following生产者队列
@@ -247,13 +265,14 @@ if __name__ == '__main__':
     # 初始等级
     level = 0
     # 初始referer
-    referer = ' '
+    default_referer = username
     # 初始关系类型
     type = 'self'
     # 加入初始用户
-    mariadb_insert(user_name=username, level=level, referer=referer, type=type)
+    mariadb_insert(user_name=username, level=level, referer=default_referer, type=type)
     while level != 6:
         for i in find_all_level(level=level):
+            referer = i[1]
             # i:(1, 'HolaJam', '0', ' ', 'self')
             # 对线程上锁
             # followers锁
@@ -261,14 +280,8 @@ if __name__ == '__main__':
             # following锁
             following_lock = threading.Lock()
             user_info(username=i[1])
-            referer = i[1]
-            # todo 无法迭代插入数据
+
         level += 1
-
-
-
-
-
 
 
 # 消费者 - 生产者 模型基本完成，在INSERT时候不会消耗太多时间
