@@ -1,6 +1,7 @@
 from gevent import monkey
 monkey.patch_all()
 import queue
+import datetime
 import gevent
 import requests
 import threading
@@ -177,6 +178,7 @@ class following_producer(threading.Thread):
         following_lock.acquire()
         for i in self.tmp:
             # print(i)
+
             self.data.put(i)
 
 
@@ -191,6 +193,7 @@ class followers_consumer(threading.Thread):
         self.referer = referer
 
     def run(self):
+        followers_lock.release()
         # follower线程连接
         follower_connection = mariadb.connect(
             host='localhost',
@@ -201,7 +204,7 @@ class followers_consumer(threading.Thread):
             charset='UTF8')
         while True:
             try:
-                user_name = followers_queue.get(block=True)
+                user_name = followers_queue.get()
                 if check_relationship(
                         connection=follower_connection,
                         username=user_name,
@@ -212,12 +215,9 @@ class followers_consumer(threading.Thread):
                         level=level + 1,
                         referer=referer,
                         type='follower')
-                else:
-                    continue
             except Exception as e:
                 break
-            follower_connection.close()
-        followers_lock.release()
+        follower_connection.close()
 
 
 class following_consumer(threading.Thread):
@@ -231,6 +231,7 @@ class following_consumer(threading.Thread):
         self.referer = referer
 
     def run(self):
+        following_lock.release()
         # following线程连接
         following_connection = mariadb.connect(
             host='localhost',
@@ -241,7 +242,7 @@ class following_consumer(threading.Thread):
             charset='UTF8')
         while True:
             try:
-                user_name = following_queue.get(block=True)
+                user_name = following_queue.get()
 
                 if check_relationship(
                         connection=following_connection,
@@ -253,12 +254,11 @@ class following_consumer(threading.Thread):
                         level=level + 1,
                         referer=referer,
                         type='following')
-                else:
-                    continue
             except Exception as e:
-                following_connection.close()
                 break
-            following_lock.release()
+        following_connection.close()
+
+
 
 
 def followers(username):
@@ -274,13 +274,11 @@ def user_info(username):
         gevent.spawn(followers, username),
         gevent.spawn(following, username),
     ])
+    gevent.get_hub().join()
 
 if __name__ == '__main__':
     new = github_spider()
-    # followers生产者队列
-    followers_queue = queue.Queue()
-    # following生产者队列
-    following_queue = queue.Queue()
+
     # 主线程连接
     conn = mariadb.connect(
         host='localhost',
@@ -289,8 +287,6 @@ if __name__ == '__main__':
         passwd='test',
         db='github',
         charset='UTF8')
-
-
 
     # 目标用户
     username = 'HolaJam'
@@ -307,20 +303,27 @@ if __name__ == '__main__':
         level=level,
         referer=default_referer,
         type=type)
+    # followers生产者队列
+    followers_queue = queue.Queue()
+    # following生产者队列
+    following_queue = queue.Queue()
+    # 对线程上锁
+    # followers锁
+    followers_lock = threading.Lock()
+    # following锁
+    following_lock = threading.Lock()
     while level != 6:
+        start_time = datetime.datetime.now()
         for i in find_all_level(connection=conn, level=level):
             referer = i[1]
             # i:(1, 'HolaJam', '0', ' ', 'self')
-            # 对线程上锁
-            # followers锁
-            followers_lock = threading.Lock()
-            # following锁
-            following_lock = threading.Lock()
             user_info(username=i[1])
 
         level += 1
-
+        end_time = datetime.datetime.now()
+        print('level %s cost %s' % (level, end_time-start_time))
 
 # 消费者 - 生产者 模型基本完成，在INSERT时候不会消耗太多时间
 # todo 完善其他功能
 # todo 增加抓取的多线程
+# todo 线程锁
