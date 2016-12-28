@@ -6,7 +6,7 @@ import datetime
 import gevent
 import requests
 import threading
-import pymysql as mariadb
+# import pymysql as mariadb
 # Threads may share the module, but not connections.
 # 线程可以共享模块，但不能共享连接。
 # https://www.python.org/dev/peps/pep-0249/#threadsafety
@@ -14,42 +14,32 @@ from requests.packages.urllib3 import Retry
 from requests.adapters import HTTPAdapter
 from bs4 import BeautifulSoup
 
-
-def mariadb_insert(connection, user_name, level, referer, type):
-    with connection as cursor:
-        SQL = '''INSERT INTO relationship (user_name, level, referer, type) VALUES (%s,%s,%s,%s)'''
-        cursor.execute(SQL, (user_name, level, referer, type))
-    cursor.close()
+from sqlalchemy import create_engine, Table, Column, Integer, String, MetaData
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.declarative import declarative_base
 
 
-def mariadb_select_forward(connection, user_name, referer):
-    with connection as cursor:
-        SQL = '''SELECT * FROM relationship WHERE user_name=%s AND referer=%s'''
-        cursor.execute(SQL, (user_name, referer))
-    user = cursor.fetchone()
-    cursor.close()
-    return user
-
-def find_all_level(connection, level):
-    with connection as cursor:
-        SQL = '''SELECT * FROM relationship WHERE level=%s'''
-        cursor.execute(SQL, level)
-    levels = cursor.fetchall()
-    cursor.close()
-    return levels
+def find_all_level(level):
+    tmp_session = DBSession()
+    users = []
+    res = tmp_session.query(relationship).filter(
+        relationship.level == level).all()
+    for i in res:
+        users.append(i.user_name)
+    tmp_session.close()
+    return users
 
 
-def check_relationship(connection, username, referer):
+def check_relationship(username, referer):
     # 校验是否存在本关系
     # 不存在时候插入
-    if mariadb_select_forward(
-            connection=connection,
-            user_name=username,
-            referer=referer,
-    ) is None:
-        return True
-    else:
+    try:
+        res = session.query(relationship).filter(
+            relationship.user_name == username,
+            relationship.referer == referer).one()
         return False
+    except Exception as e:
+        return True
 
 
 # followers生产者<->followers消费者
@@ -117,12 +107,14 @@ class github_spider(object):
             tmp = self.__relationship(
                 username=username, action=action, page=page)
             if tmp == []:
-                with open('log.txt','a') as f:
-                    f.write('%s %s %s %s page break\n' % (str(datetime.datetime.now()), username, action, page))
+                with open('log.txt', 'a') as f:
+                    f.write('%s %s %s %s page break\n' %
+                            (str(datetime.datetime.now()), username, action, page))
                 f.close()
                 break
             with open('log.txt', 'a') as f:
-                f.write('%s %s %s %s page running\n' % (str(datetime.datetime.now()), username, action, page))
+                f.write('%s %s %s %s page running\n' %
+                        (str(datetime.datetime.now()), username, action, page))
             f.close()
             if action == 'followers':
                 _followers_producer = followers_producer(tmp=tmp)
@@ -188,31 +180,24 @@ class followers_consumer(threading.Thread):
 
     def run(self):
         followers_lock.release()
-        # follower线程连接
-        follower_connection = mariadb.connect(
-            host='localhost',
-            port=3306,
-            user='github',
-            passwd='test',
-            db='github',
-            charset='UTF8')
         while True:
-
+            follower_session = DBSession()
             try:
                 user_name = followers_queue.get()
                 if check_relationship(
-                        connection=follower_connection,
                         username=user_name,
                         referer=referer):
-                    mariadb_insert(
-                        connection=follower_connection,
+                    new_follower = relationship(
                         user_name=user_name,
                         level=level + 1,
-                        referer=referer,
-                        type='follower')
+                        type='follower',
+                        referer=referer)
+                    follower_session.add(new_follower)
+                    follower_session.commit()
+                    follower_session.close()
             except Exception as e:
+                follower_session.close()
                 break
-        follower_connection.close()
 
 
 class following_consumer(threading.Thread):
@@ -228,32 +213,25 @@ class following_consumer(threading.Thread):
     def run(self):
         following_lock.release()
         # following线程连接
-        following_connection = mariadb.connect(
-            host='localhost',
-            port=3306,
-            user='github',
-            passwd='test',
-            db='github',
-            charset='UTF8')
         while True:
+            following_session = DBSession()
             try:
                 user_name = following_queue.get()
 
                 if check_relationship(
-                        connection=following_connection,
                         username=user_name,
                         referer=referer):
-                    mariadb_insert(
-                        connection=following_connection,
+                    new_following = relationship(
                         user_name=user_name,
                         level=level + 1,
-                        referer=referer,
-                        type='following')
+                        type='following',
+                        referer=referer)
+                    following_session.add(new_following)
+                    following_session.commit()
+                    following_session.close()
             except Exception as e:
+                following_session.close()
                 break
-        following_connection.close()
-
-
 
 
 def followers(username):
@@ -274,30 +252,56 @@ def user_info(username):
 if __name__ == '__main__':
     new = github_spider()
 
-    # 主线程连接
-    conn = mariadb.connect(
-        host='localhost',
-        port=3306,
-        user='github',
-        passwd='test',
-        db='github',
-        charset='UTF8')
+    # 创建连接
+    # '数据库类型+数据库驱动名称://用户名:口令@机器地址:端口号/数据库名'
+    engine = create_engine('mysql+pymysql://github:test@localhost/github')
+    # 创建表
+    metadata = MetaData(engine)
+    user = Table('relationship', metadata,
+                 Column('id', Integer, primary_key=True),
+                 Column('user_name', String(256)),
+                 Column('referer', String(256)),
+                 Column('level', Integer),
+                 Column('type', String(256))
+                 )
+    metadata.create_all()
+    # 创建对象的基类
+    Base = declarative_base()
+    # 定义User对象:
 
+    class relationship(Base):
+        # 表名:
+        __tablename__ = 'relationship'
+        # 表结构:
+        id = Column(Integer, primary_key=True)
+        user_name = Column(String(256))
+        level = Column(Integer)
+        referer = Column(String(256))
+        type = Column(String(256))
+
+    # 创建DBSession类型:
+    DBSession = sessionmaker(bind=engine)
+    # 创建session对象:
+    session = DBSession()
     # 目标用户
     username = 'HolaJam'
     # 初始等级
     level = 0
     # 初始referer
-    default_referer = username
+    referer = username
     # 初始关系类型
     type = 'self'
     # 加入初始用户
-    mariadb_insert(
-        connection=conn,
+    # 创建新User对象:
+    new_user = relationship(
         user_name=username,
         level=level,
-        referer=default_referer,
-        type=type)
+        type=type,
+        referer=referer)
+    # 添加到session:
+    session.add(new_user)
+    # 提交即保存到数据库:
+    session.commit()
     # followers生产者队列
     followers_queue = queue.Queue()
     # following生产者队列
@@ -307,19 +311,18 @@ if __name__ == '__main__':
     followers_lock = threading.Lock()
     # following锁
     following_lock = threading.Lock()
+    session.close()
     while level != 6:
         start_time = datetime.datetime.now()
-        for i in find_all_level(connection=conn, level=level):
-            referer = i[1]
-            # i:(1, 'HolaJam', '0', ' ', 'self')
-            user_info(username=i[1])
+        for i in find_all_level(level=level):
+            referer = i
+            user_info(username=i)
             gc.collect()
-
         level += 1
         end_time = datetime.datetime.now()
-        print('level %s cost %s' % (level, end_time-start_time))
+        print('level %s cost %s' % (level, end_time - start_time))
+
 
 # 消费者 - 生产者 模型基本完成，在INSERT时候不会消耗太多时间
 # todo 完善其他功能
 # todo 增加抓取的多线程
-# todo sqlalchemy解决Too many connections问题
