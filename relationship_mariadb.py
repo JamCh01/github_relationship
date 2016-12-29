@@ -1,6 +1,8 @@
 from gevent import monkey
 monkey.patch_all()
 import gc
+import schedule
+import time
 import queue
 import datetime
 import gevent
@@ -18,6 +20,24 @@ from sqlalchemy import create_engine, Table, Column, Integer, String, MetaData
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 
+server_chan_url = 'http://sc.ftqq.com/SCU4819T4a9424bcfd09b1c39cee36cae6309d9758648caace3a6.send'
+
+def dimension(level):
+    data = {
+        'text': '用户纬度%s已经抓取完成(。・`ω´・)' % level,
+        'desp': '''本次抓取共耗时：%s (￣_,￣ )''' % (end_time - start_time)
+    }
+    r = requests.post(url=server_chan_url, data=data)
+def total():
+    tmp_session = DBSession()
+    res = tmp_session.query(relationship).count()
+    data = {
+        'text':'%s 总计' % datetime.datetime.now(),
+        'desp':res
+    }
+    r = requests.post(url=server_chan_url, data=data)
+    return None
+
 
 def find_all_level(level):
     tmp_session = DBSession()
@@ -34,7 +54,7 @@ def check_relationship(username, referer):
     # 校验是否存在本关系
     # 不存在时候插入
     try:
-        res = session.query(relationship).filter(
+        session.query(relationship).filter(
             relationship.user_name == username,
             relationship.referer == referer).one()
         return False
@@ -59,10 +79,10 @@ class github_spider(object):
         :return: 页面soup对象
         '''
         s = requests.Session()
-        https_retries = Retry(50)
+        https_retries = Retry(60)
         https = requests.adapters.HTTPAdapter(max_retries=https_retries)
         s.mount('https://', https)
-        r = s.get(url=url, timeout=30)
+        r = s.get(url=url, timeout=60)
         res = (r.text.encode(r.encoding).decode('utf8'))
         soup = BeautifulSoup(res, 'html.parser')
         return soup
@@ -251,7 +271,6 @@ def user_info(username):
 
 if __name__ == '__main__':
     new = github_spider()
-
     # 创建连接
     # '数据库类型+数据库驱动名称://用户名:口令@机器地址:端口号/数据库名'
     engine = create_engine('mysql+pymysql://github:test@localhost/github')
@@ -312,6 +331,7 @@ if __name__ == '__main__':
     # following锁
     following_lock = threading.Lock()
     session.close()
+    schedule.every().minutes.do(total)
     while level != 6:
         start_time = datetime.datetime.now()
         for i in find_all_level(level=level):
@@ -321,6 +341,8 @@ if __name__ == '__main__':
         level += 1
         end_time = datetime.datetime.now()
         print('level %s cost %s' % (level, end_time - start_time))
+        dimension(level=level)
+
 
 
 # 消费者 - 生产者 模型基本完成，在INSERT时候不会消耗太多时间
