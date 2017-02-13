@@ -1,6 +1,5 @@
 from gevent import monkey
 monkey.patch_all()
-import gc
 import queue
 import datetime
 import gevent
@@ -19,6 +18,11 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 
 server_chan_url = 'http://sc.ftqq.com/SCU4819T4a9424bcfd09b1c39cee36cae6309d9758648caace3a6.send'
+
+
+followers_page_queue = queue.Queue()
+following_page_queue = queue.Queue()
+
 
 def dimension(level):
     data = {
@@ -78,10 +82,10 @@ class github_spider(object):
         :return: 页面soup对象
         '''
         s = requests.Session()
-        https_retries = Retry(60)
+        https_retries = Retry(100)
         https = requests.adapters.HTTPAdapter(max_retries=https_retries)
         s.mount('https://', https)
-        r = s.get(url=url, timeout=60)
+        r = s.get(url=url, timeout=30)
         res = (r.text.encode(r.encoding).decode('utf8'))
         soup = BeautifulSoup(res, 'html.parser')
         return soup
@@ -106,6 +110,8 @@ class github_spider(object):
             node = self.__get_page(
                 url='%s%s/?page=%s&tab=%s' %
                 (self.base_url, username, page, action))
+            if node == None:
+                return tmp.append('error')
             all_user_node = node.find(
                 'div', {'class': 'js-repo-filter position-relative'})
             users_node = all_user_node.find_all(
@@ -125,6 +131,11 @@ class github_spider(object):
         while True:
             tmp = self.__relationship(
                 username=username, action=action, page=page)
+            if tmp == ['error']:
+                with open('log.txt', 'a') as f:
+                    f.write('%s %s %s %s page error\n' %
+                            (str(datetime.datetime.now()), username, action, page))
+                f.close()
             if tmp == []:
                 with open('log.txt', 'a') as f:
                     f.write('%s %s %s %s page break\n' %
@@ -136,17 +147,26 @@ class github_spider(object):
                         (str(datetime.datetime.now()), username, action, page))
             f.close()
             if action == 'followers':
+
                 _followers_producer = followers_producer(tmp=tmp)
-                _followers_consumer = followers_consumer()
                 _followers_producer.start()
                 _followers_producer.join()
-                _followers_consumer.start()
+                followers_threads = []
+                for i in range(followers_queue.qsize()):
+                    _followers_consumer = followers_consumer()
+                    followers_threads.append(_followers_consumer)
+                for followers in followers_threads:
+                    followers.start()
             elif action == 'following':
                 _following_producer = following_producer(tmp=tmp)
-                _following_consumer = following_consumer()
                 _following_producer.start()
                 _following_producer.join()
-                _following_consumer.start()
+                following_threads = []
+                for i in range(following_queue.qsize()):
+                    _following_consumer = following_consumer()
+                    following_threads.append(_following_consumer)
+                for following in following_threads:
+                    following.start()
             page += 1
 
 
@@ -162,9 +182,7 @@ class followers_producer(threading.Thread):
         self.data = followers_queue
 
     def run(self):
-        followers_lock.acquire()
         for i in self.tmp:
-            # print(i)
             self.data.put(i)
 
 
@@ -180,11 +198,9 @@ class following_producer(threading.Thread):
         self.data = following_queue
 
     def run(self):
-        following_lock.acquire()
         for i in self.tmp:
-            # print(i)
-
             self.data.put(i)
+
 
 
 class followers_consumer(threading.Thread):
@@ -198,8 +214,8 @@ class followers_consumer(threading.Thread):
         self.referer = referer
 
     def run(self):
-        followers_lock.release()
         while True:
+            followers_lock.acquire()
             follower_session = DBSession()
             try:
                 user_name = followers_queue.get()
@@ -215,8 +231,10 @@ class followers_consumer(threading.Thread):
                     follower_session.commit()
                     follower_session.close()
             except Exception as e:
-                follower_session.close()
                 break
+            finally:
+                follower_session.close()
+                followers_lock.release()
 
 
 class following_consumer(threading.Thread):
@@ -230,27 +248,27 @@ class following_consumer(threading.Thread):
         self.referer = referer
 
     def run(self):
-        following_lock.release()
         # following线程连接
         while True:
-            following_session = DBSession()
-            try:
-                user_name = following_queue.get()
-
-                if check_relationship(
-                        username=user_name,
-                        referer=referer):
-                    new_following = relationship(
-                        user_name=user_name,
-                        level=level + 1,
-                        type='following',
-                        referer=referer)
-                    following_session.add(new_following)
-                    following_session.commit()
-                    following_session.close()
-            except Exception as e:
-                following_session.close()
+            if following_queue.empty():
                 break
+            following_lock.acquire()
+            following_session = DBSession()
+            user_name = following_queue.get()
+            if check_relationship(
+                    username=user_name,
+                    referer=referer):
+                new_following = relationship(
+                    user_name=user_name,
+                    level=level + 1,
+                    type='following',
+                    referer=referer)
+                following_session.add(new_following)
+                following_session.commit()
+                following_session.close()
+            following_session.close()
+            following_lock.release()
+
 
 
 def followers(username):
@@ -302,7 +320,7 @@ if __name__ == '__main__':
     # 创建session对象:
     session = DBSession()
     # 目标用户
-    username = 'HolaJam'
+    username = 'jamcplusplus'
     # 初始等级
     level = 0
     # 初始referer
@@ -335,7 +353,6 @@ if __name__ == '__main__':
         for i in find_all_level(level=level):
             referer = i
             user_info(username=i)
-            gc.collect()
         level += 1
         end_time = datetime.datetime.now()
         print('level %s cost %s' % (level, end_time - start_time))
