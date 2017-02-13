@@ -1,13 +1,12 @@
 import re
-import queue
+import orm
 import math
+import queue
 import requests
 import threading
 from requests.packages.urllib3 import Retry
 from requests.adapters import HTTPAdapter
 from bs4 import BeautifulSoup
-from gevent import monkey
-monkey.patch_all()
 
 followers_page = queue.Queue()
 following_page = queue.Queue()
@@ -94,10 +93,6 @@ class github(object):
         finally:
             return users
 
-
-
-
-
 class followers_producer(threading.Thread, github):
 
     def __init__(self, user_name, max_page):
@@ -168,6 +163,33 @@ class following_consumer(threading.Thread, github):
             user_name = following.get()
             print(user_name)
             following_lock.release()
+            pass
+        
+def find_all_level(level):
+    find_session = orm.DBSession()
+    users = []
+    res = find_session.query(orm.relationship).filter_by(
+        level = level).all()
+    for i in res:
+        users.append(i.user_name)
+    find_session.close()
+    return users
+
+
+def check_relationship(username, referer):
+    # 校验是否存在本关系
+    # 不存在时候插入
+    check_session = orm.DBSession()
+    try:
+        check_session.query(orm.relationship).filter_by(
+            user_name = username,
+            referer = referer).one()
+        return False
+    except Exception as e:
+        return True
+    finally:
+        check_session.close()
+
 
 def main(user_name):
     _followers_producer = followers_producer(user_name=user_name,
