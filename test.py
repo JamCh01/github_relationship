@@ -16,7 +16,7 @@ followers = queue.Queue()
 following = queue.Queue()
 
 
-user_name = 'jamcplusplus'
+
 followers_lock = threading.Lock()
 following_lock = threading.Lock()
 
@@ -94,19 +94,7 @@ class github(object):
         finally:
             return users
 
-    def run(self):
 
-        _followers_producer = followers_producer(user_name=user_name, max_page=self.follow(user_name=user_name, action=followers))
-        _following_producer = following_producer(user_name=user_name, max_page=self.follow(user_name=user_name, action=following))
-
-        _followers_producer.run()
-        _following_producer.run()
-
-        _followers_consumer = followers_consumer()
-        _following_consumer = following_consumer()
-
-        _followers_consumer.run()
-        _following_consumer.run()
 
 
 
@@ -181,5 +169,20 @@ class following_consumer(threading.Thread, github):
             print(user_name)
             following_lock.release()
 
-test = github()
-test.run()
+def main(user_name):
+    _followers_producer = followers_producer(user_name=user_name,
+                                             max_page=github().follow(user_name=user_name, action=followers))
+    _following_producer = following_producer(user_name=user_name,
+                                             max_page=github().follow(user_name=user_name, action=following))
+
+    _followers_producer.run()
+    _following_producer.run()
+
+    _followers_consumer = followers_consumer()
+    _following_consumer = following_consumer()
+
+    _followers_consumer.run()
+    _following_consumer.run()
+
+if __name__ == '__main__':
+    main(user_name = 'jamcplusplus')
