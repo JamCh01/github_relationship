@@ -4,7 +4,7 @@ from sqlalchemy.ext.declarative import declarative_base
 
 # 创建连接
 # '数据库类型+数据库驱动名称://用户名:口令@机器地址:端口号/数据库名'
-engine = create_engine('mysql+pymysql://github:test@localhost/github')
+engine = create_engine('mysql+pymysql://root:test@localhost/github')
 # 创建表
 metadata = MetaData(engine)
 user = Table('relationship', metadata,
