@@ -7,7 +7,7 @@ from requests.packages.urllib3 import Retry
 from requests.adapters import HTTPAdapter
 from bs4 import BeautifulSoup
 from test_config import database
-
+# todo logging
 page_queue = queue.Queue()
 
 
@@ -144,36 +144,41 @@ class relationship(threading.Thread, github):
                         action='following',
                         level=level)
 
-
-user_name = ['jamcplusplus']
-referer = 'self'
-level = 0
-
-
 def producer(level):
     print('running level {}'.format(level))
     users = database().find_level(level=level)
+    # 构建字典，
     for user in users:
         print(user)
-        data = {}
-        data['user'] = user
-        data['following'] = github().follow(user_name=user, action='following')
-        data['followers'] = github().follow(user_name=user, action='followers')
-        data['referer'] = referer
+        data = {
+            'user':user,
+            'following':github().follow(user_name=user, action='following'),
+            'followers':github().follow(user_name=user, action='followers'),
+        }
         page_queue.put(data)
 
-database().init_user()
+if __name__ == '__main__':
 
-while level <= 6:
-    producer(level)
-    level += 1
-    while page_queue.empty() is False:
-        tasks = []
-        for i in range(100):
-            following = relationship()
-            tasks.append(following)
-        for task in tasks:
-            task.start()
-        for task in tasks:
-            task.join()
-    print('level {} finished'.format(level))
+    # 根据config中的信息初始化数据库
+    database().init_user()
+    # 设置初始等级，referer
+    level = 0
+    referer = ''
+    # 进入while循环，整体循环六次
+    while level <= 6:
+        # 生产者，根据level查询数据库中所有level的用户
+        producer(level)
+        # 设置level+1，使得下一次循环中level正确
+        level += 1
+        # 判断队列是否为空
+        while page_queue.empty() is False:
+            # 设置任务列表，并加入任务
+            tasks = []
+            for i in range(100):
+                following = relationship()
+                tasks.append(following)
+            for task in tasks:
+                task.start()
+            for task in tasks:
+                task.join()
+        print('level {} finished'.format(level))

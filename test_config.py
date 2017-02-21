@@ -23,7 +23,7 @@ class database(object):
 
 
     engine = create_engine(
-            'mysql+pymysql://root:test@localhost/github', pool_size=100)
+            'mysql+pymysql://root:test@localhost/github', pool_size=500)
     session = sessionmaker(bind=engine)
 
 
