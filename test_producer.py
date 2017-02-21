@@ -15,6 +15,7 @@ class github(object):
 
     def __init__(self):
         pass
+
     def spider(self, url):
         headers = {
             'User-Agent':
@@ -28,7 +29,7 @@ class github(object):
         s.mount('https://', https)
         r = s.get(url=url, timeout=10, headers=headers)
         res = (r.text.encode(r.encoding).decode('utf8'))
-        soup = BeautifulSoup(res, 'html.parser')
+        soup = BeautifulSoup(res, 'lxml')
         return soup
 
     def count(self, user_name):
@@ -39,25 +40,25 @@ class github(object):
             repo = soup.find('a',
                              {'href': '/{}?tab=repositories'.format(user_name)}).find('span',
                                                                                       {'class': 'counter'}).text.strip()
-        except ValueError:
+        except Exception as e:
             repo = 0
         try:
             stars = soup.find('a',
                               {'href': '/{}?tab=stars'.format(user_name)}).find('span',
                                                                                 {'class': 'counter'}).text.strip()
-        except ValueError:
+        except Exception as e:
             stars = 0
         try:
             followers = soup.find('a',
                                   {'href': '/{}?tab=followers'.format(user_name)}).find('span',
                                                                                         {'class': 'counter'}).text.strip()
-        except ValueError:
+        except Exception as e:
             followers = 0
         try:
             following = soup.find('a',
                                   {'href': '/{}?tab=following'.format(user_name)}).find('span',
                                                                                         {'class': 'counter'}).text.strip()
-        except ValueError:
+        except Exception as e:
             following = 0
 
         res = {
@@ -97,7 +98,7 @@ class github(object):
         try:
             all_user_node = soup.find(
                 'div', {'class':
-                            'js-repo-filter position-relative'})
+                        'js-repo-filter position-relative'})
             users_node = all_user_node.find_all(
                 'div', {
                     'class': 'd-table col-12 width-full py-4 border-bottom border-gray-light'})
@@ -105,30 +106,43 @@ class github(object):
                 return users
             for i in users_node:
                 user = i.find('span', {'class':
-                                           'link-gray pl-1'}).text
+                                       'link-gray pl-1'}).text
                 users.append(user)
         except Exception as e:
             print(e)
             pass
         return users
 
+
 class relationship(threading.Thread, github):
 
-    def __init__(self, action):
+    def __init__(self):
         threading.Thread.__init__(self)
-        self.action = action
 
     def run(self):
         while True:
             if page_queue.empty():
                 break
             info = page_queue.get()
-            print(info)
-            for url in info['{}'.format(self.action)]:
+            for url in info['{}'.format('followers')]:
                 tmp = self.user(url=url)
                 for user in tmp:
-                    database().insert(user_name=user, referer=info['user'], action=self.action, level=level)
+                    print('{} is running'.format(user))
+                    database().insert(
+                        user_name=user,
+                        referer=info['user'],
+                        action='followers',
+                        level=level)
 
+            for url in info['{}'.format('following')]:
+                tmp = self.user(url=url)
+                for user in tmp:
+                    print('{} is running'.format(user))
+                    database().insert(
+                        user_name=user,
+                        referer=info['user'],
+                        action='following',
+                        level=level)
 
 
 user_name = ['jamcplusplus']
@@ -139,8 +153,8 @@ level = 0
 def producer(level):
     print('running level {}'.format(level))
     users = database().find_level(level=level)
-    print(users)
     for user in users:
+        print(user)
         data = {}
         data['user'] = user
         data['following'] = github().follow(user_name=user, action='following')
@@ -150,18 +164,16 @@ def producer(level):
 
 database().init_user()
 
-while level<=6:
+while level <= 6:
     producer(level)
     level += 1
-    tasks = []
-    for i in range(50):
-        following = relationship(action='following')
-        followers = relationship(action='followers')
-        tasks.append(following)
-        tasks.append(followers)
-    for task in tasks:
-        task.start()
-    for task in tasks:
-        task.join()
-    print('level {} finished'.format({level}))
-
+    while page_queue.empty() is False:
+        tasks = []
+        for i in range(100):
+            following = relationship()
+            tasks.append(following)
+        for task in tasks:
+            task.start()
+        for task in tasks:
+            task.join()
+    print('level {} finished'.format(level))
