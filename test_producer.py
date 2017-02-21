@@ -144,6 +144,7 @@ class relationship(threading.Thread, github):
                         action='following',
                         level=level)
 
+
 def producer(level):
     print('running level {}'.format(level))
     users = database().find_level(level=level)
@@ -151,9 +152,9 @@ def producer(level):
     for user in users:
         print(user)
         data = {
-            'user':user,
-            'following':github().follow(user_name=user, action='following'),
-            'followers':github().follow(user_name=user, action='followers'),
+            'user': user,
+            'following': github().follow(user_name=user, action='following'),
+            'followers': github().follow(user_name=user, action='followers'),
         }
         page_queue.put(data)
 

@@ -1,4 +1,5 @@
-from sqlalchemy import create_engine, Table, Column, Integer, String, MetaData
+import datetime
+from sqlalchemy import create_engine, Table, Column, Integer, String, TIMESTAMP, MetaData, func
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 default_user = 'jamcplusplus'
@@ -8,6 +9,7 @@ _database = 'github'
 _database_user = 'root'
 _database_pass = 'test'
 Base = declarative_base()
+
 
 class relationship(Base):
     # 表名:
@@ -19,13 +21,12 @@ class relationship(Base):
     referer = Column(String(256))
     type = Column(String(256))
 
+
 class database(object):
 
-
     engine = create_engine(
-            'mysql+pymysql://root:test@localhost/github', pool_size=500)
+        'mysql+pymysql://root:test@localhost/github', pool_size=500)
     session = sessionmaker(bind=engine)
-
 
     def __check(self, username, referer):
         tmp_session = self.session()
@@ -90,3 +91,55 @@ class database(object):
         tmp_session.add(init)
         tmp_session.commit()
         tmp_session.close()
+
+
+class github_statistics_all(Base):
+    __tablename__ = 'statistics_all'
+    id = Column(Integer, autoincrement=True)
+    time = Column(TIMESTAMP, default=datetime.datetime.now())
+    total = Column(Integer)
+
+
+class github_statistics_level(Base):
+    __tablename__ = 'statistics_level'
+    id = Column(Integer, autoincrement=True)
+    time = Column(TIMESTAMP, default=datetime.datetime.now())
+    total = Column(Integer)
+    level = Column(Integer)
+
+
+class statistics(object, database):
+
+    def __init__(self):
+        statistics_engine = create_engine('sqlite:///statistics.db')
+        self.DBSession = sessionmaker(bind=statistics_engine)
+
+    def statistics_all(self):
+        tmp_session = self.session()
+        total = tmp_session.query(
+            func.count()).select_from(relationship).scalar()
+        tmp_session.close()
+        statistics_session = self.DBSession()
+        all = github_statistics_all(
+            total=total
+        )
+        statistics_session.add(all)
+        statistics_session.commit()
+        statistics_session.close()
+        return total
+
+    def statistics_level(self, level):
+        tmp_session = self.session()
+        total = tmp_session.query(
+            func.count(
+                'level={}'.format(level))).select_from(relationship).scalar()
+        tmp_session.close()
+        statistics_session = self.DBSession()
+        level = github_statistics_level(
+            total=total,
+            level=level
+        )
+        statistics_session.add(level)
+        statistics_session.commit()
+        statistics_session.close()
+        return total
