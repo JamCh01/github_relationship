@@ -2,12 +2,10 @@ import datetime
 from sqlalchemy import create_engine, Table, Column, Integer, String, TIMESTAMP, MetaData, func
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
+
+
 default_user = 'jamcplusplus'
 
-
-_database = 'github'
-_database_user = 'root'
-_database_pass = 'test'
 Base = declarative_base()
 
 
@@ -21,6 +19,24 @@ class relationship(Base):
     referer = Column(String(256))
     type = Column(String(256))
 
+class repo(Base):
+    # 表名:
+    __tablename__ = 'repo'
+    # 表结构:
+    id = Column(Integer, primary_key=True)
+    project_name = Column(String(256))
+    project_url = Column(String(256))
+    project_user = Column(String(256))
+
+class star(Base):
+    # 表名:
+    __tablename__ = 'star'
+    # 表结构:
+    id = Column(Integer, primary_key=True)
+    project_name = Column(String(256))
+    project_url = Column(String(256))
+    project_owner = Column(String(256))
+    referer_user = Column(String(256))
 
 class database(object):
 
@@ -55,7 +71,7 @@ class database(object):
 
     def create_table(self):
         metadata = MetaData(self.engine)
-        self.user = Table('relationship', metadata,
+        self.relationship = Table('relationship', metadata,
                           Column('id', Integer, primary_key=True),
                           Column('user_name', String(256)),
                           Column('referer', String(256)),
@@ -64,7 +80,7 @@ class database(object):
                           )
         metadata.create_all()
 
-    def insert(self, **kwargs):
+    def relationship(self, **kwargs):
         tmp_session = self.session()
         user_name = kwargs['user_name']
         referer = kwargs['referer']
@@ -81,7 +97,37 @@ class database(object):
         tmp_session.commit()
         tmp_session.close()
 
+    def repo(self, **kwargs):
+        tmp_session = self.session()
+        project_name = kwargs['project_name']
+        project_url = kwargs['project_url']
+        project_user = kwargs['project_user']
+        new_project = repo(
+            project_name=project_name,
+            project_url=project_url,
+            project_user=project_user)
+        tmp_session.add(new_project)
+        tmp_session.commit()
+        tmp_session.close()
+
+    def star(self, **kwargs):
+        tmp_session = self.session()
+        project_name = kwargs['project_name']
+        project_url = kwargs['project_url']
+        project_owner = kwargs['project_owner']
+        referer_user = kwargs['referer_user']
+        new_project = star(
+            project_name=project_name,
+            project_url=project_url,
+            project_owner=project_owner,
+            referer_user=referer_user)
+        tmp_session.add(new_project)
+        tmp_session.commit()
+        tmp_session.close()
+
+
     def init_user(self):
+        """"初始化用户"""
         tmp_session = self.session()
         init = relationship(
             user_name=default_user,
@@ -95,20 +141,20 @@ class database(object):
 
 class github_statistics_all(Base):
     __tablename__ = 'statistics_all'
-    id = Column(Integer, autoincrement=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     time = Column(TIMESTAMP, default=datetime.datetime.now())
     total = Column(Integer)
 
 
 class github_statistics_level(Base):
     __tablename__ = 'statistics_level'
-    id = Column(Integer, autoincrement=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     time = Column(TIMESTAMP, default=datetime.datetime.now())
     total = Column(Integer)
     level = Column(Integer)
 
 
-class statistics(object, database):
+class statistics(database):
 
     def __init__(self):
         statistics_engine = create_engine('sqlite:///statistics.db')
