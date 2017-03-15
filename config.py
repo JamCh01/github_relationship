@@ -48,7 +48,7 @@ class database(object):
         tmp_session = self.session()
         try:
             tmp_session.query(relationship).filter_by(
-                user_name=username, referer=referer).one()
+                user_name=referer, referer=username).one()
             return True
         except Exception as e:
             return False
@@ -67,7 +67,7 @@ class database(object):
             pass
         finally:
             tmp_session.close()
-            return users
+            return list(set(users))
 
     def create_table(self):
         metadata = MetaData(self.engine)

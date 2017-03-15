@@ -99,59 +99,79 @@ class consumer(threading.Thread):
                 info = star_queue.get()
                 user = info['user']
                 tmp = github(user_name=user)
-                for url in info['star']:
-                    repos = tmp.star(url=url)
-                    for repo_name in repos:
-                        project_owner = repo_name.split('/')[0]
-                        project_name = repo_name.split('/')[1]
-                        database().star(
-                            referer_user=user,
-                            project_name=project_name,
-                            project_url=' ',
-                            project_owner=project_owner)
+                try:
+                    if info['star'] == []:
+                        continue
+                    for url in info['star']:
+                        repos = tmp.star(url=url)
+                        for repo_name in repos:
+                            project_owner = repo_name.split('/')[0]
+                            project_name = repo_name.split('/')[1]
+                            database().star(
+                                referer_user=user,
+                                project_name=project_name,
+                                project_url=' ',
+                                project_owner=project_owner)
+                except Exception as e:
+                    star_queue.put(info)
 
         def repo():
             while not repo_queue.empty():
                 info = repo_queue.get()
                 user = info['user']
                 tmp = github(user_name=user)
-                for url in info['repo']:
-                    repos = tmp.repo(url=url)
-                    for repo_name in repos:
-                        database().repo(
-                            project_user=user,
-                            project_name=repo_name,
-                            project_url=' ')
+                try:
+                    if info['repo'] == []:
+                        continue
+                    for url in info['repo']:
+                        repos = tmp.repo(url=url)
+                        for repo_name in repos:
+                            database().repo(
+                                project_user=user,
+                                project_name=repo_name,
+                                project_url=' ')
+                except Exception as e:
+                    repo_queue.put(info)
 
         def following():
             while not following_queue.empty():
                 info = following_queue.get()
                 user = info['user']
                 tmp = github(user_name=user)
-                for url in info['following']:
-                    followings = tmp.user(url=url)
-                    for following in followings:
-                        database().relationship(
-                            user_name=following,
-                            referer=user,
-                            level=level,
-                            action='following'
-                        )
+                try:
+                    if info['following'] == []:
+                        continue
+                    for url in info['following']:
+                        followings = tmp.user(url=url)
+                        for following in followings:
+                            database().relationship(
+                                user_name=following,
+                                referer=user,
+                                level=level,
+                                action='following'
+                            )
+                except Exception as e:
+                    following_queue.put(info)
 
         def followers():
             while not followers_queue.empty():
                 info = followers_queue.get()
                 user = info['user']
                 tmp = github(user_name=user)
-                for url in info['followers']:
-                    followers = tmp.user(url=url)
-                    for follower in followers:
-                        database().relationship(
-                            user_name=follower,
-                            referer=user,
-                            level=level,
-                            action='following'
-                        )
+                try:
+                    if info['followers'] == []:
+                        continue
+                    for url in info['followers']:
+                        followers = tmp.user(url=url)
+                        for follower in followers:
+                            database().relationship(
+                                user_name=follower,
+                                referer=user,
+                                level=level,
+                                action='followers'
+                            )
+                except Exception as e:
+                    followers_queue.put(info)
 
         gevent.joinall([
             gevent.spawn(eval(self.action))
@@ -163,6 +183,7 @@ def main(level):
 
 
     for user in database().find_level(level=level-1):
+        print(user)
         user_queue.put(user)
 
     # 生产者线程
@@ -182,7 +203,7 @@ def main(level):
 
     # 消费者线程
     consumer_tasks = []
-    for i in range(100):
+    for i in range(500):
         run_consumer_star = consumer(action='star')
         run_consumer_repo = consumer(action='repo')
         run_consumer_following = consumer(action='following')
